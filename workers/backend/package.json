@@ -1,0 +1,28 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:a": "wrangler dev -c wrangler.a.jsonc",
+    "dev:b": "wrangler dev -c wrangler.b.jsonc",
+    "dev:c": "wrangler dev -c wrangler.c.jsonc",
+    "deploy:a": "wrangler deploy -c wrangler.a.jsonc",
+    "deploy:b": "wrangler deploy -c wrangler.b.jsonc",
+    "deploy:c": "wrangler deploy -c wrangler.c.jsonc",
+    "tail:a": "wrangler tail -c wrangler.a.jsonc",
+    "tail:b": "wrangler tail -c wrangler.b.jsonc",
+    "tail:c": "wrangler tail -c wrangler.c.jsonc"
+  },
+  "dependencies": {
+    "consola": "^3.4.2",
+    "drizzle-orm": "^0.45.1",
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241218.0",
+    "drizzle-kit": "^0.31.8",
+    "typescript": "^5.7.0",
+    "wrangler": "^3.99.0"
+  }
+}

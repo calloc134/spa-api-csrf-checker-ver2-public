@@ -1,0 +1,41 @@
+{
+  "name": "spa-api-csrf-checker-ver2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build:legit:alpha": "pnpm --filter legit-frontend build --mode alpha",
+    "build:legit:beta": "pnpm --filter legit-frontend build --mode beta",
+    "build:legit:gamma": "pnpm --filter legit-frontend build --mode gamma",
+    "build:attacker:beta": "pnpm --filter attacker-frontend build --mode beta",
+    "build:attacker:gamma": "pnpm --filter attacker-frontend build --mode gamma",
+    "build:all": "pnpm build:legit:alpha && pnpm build:legit:beta && pnpm build:legit:gamma && pnpm build:attacker:beta && pnpm build:attacker:gamma",
+    "dev:legit": "pnpm --filter legit-frontend dev",
+    "dev:attacker": "pnpm --filter attacker-frontend dev",
+    "dev:backend:a": "pnpm --filter backend dev:a",
+    "dev:backend:b": "pnpm --filter backend dev:b",
+    "dev:backend:c": "pnpm --filter backend dev:c",
+    "deploy:backend:a": "pnpm --filter backend deploy:a",
+    "deploy:backend:b": "pnpm --filter backend deploy:b",
+    "deploy:backend:c": "pnpm --filter backend deploy:c",
+    "deploy:backend:all": "pnpm deploy:backend:a && pnpm deploy:backend:b && pnpm deploy:backend:c",
+    "deploy:static:legit:beta": "pnpm --filter static-sites deploy:legit:beta",
+    "deploy:static:attacker:beta": "pnpm --filter static-sites deploy:attacker:beta",
+    "deploy:surge:legit:gamma": "cp apps/legit-frontend/dist-gamma/index.html apps/legit-frontend/dist-gamma/200.html && pnpm dlx surge apps/legit-frontend/dist-gamma csrf-frontend-different-domain.surge.sh",
+    "deploy:surge:attacker:gamma": "cp apps/attacker-frontend/dist-gamma/index.html apps/attacker-frontend/dist-gamma/200.html && pnpm dlx surge apps/attacker-frontend/dist-gamma csrf-attacker-frontend-different-domain.surge.sh",
+    "deploy:frontend:all": "pnpm deploy:static:legit:beta && pnpm deploy:static:attacker:beta && pnpm deploy:surge:legit:gamma && pnpm deploy:surge:attacker:gamma",
+    "deploy:all": "pnpm build:all && pnpm deploy:backend:all && pnpm deploy:frontend:all",
+    "tail:a": "pnpm --filter backend tail:a",
+    "tail:b": "pnpm --filter backend tail:b",
+    "tail:c": "pnpm --filter backend tail:c",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@vitest/browser": "^4.0.18",
+    "playwright": "^1.58.1",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

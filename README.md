@@ -104,101 +104,192 @@
 
 ## CSRF攻撃の可否（理論的分析）
 
-### 前提条件
+### 表の見方
 
-- **攻撃対象**: POSTリクエストによる状態変更操作
-- **攻撃手法**:
-  - **Alpha**: `POST application/json`（CORSプリフライト発生）
-  - **Beta**: `POST text/plain`（Simple Request、プリフライト無し）
-  - **Gamma**: `GET`（データ読み取り攻撃）
+- **横軸**: 被害者に踏ませるための攻撃者のページ
+- **縦軸**: 本来の通信元である正規のSPAページ
 
-### Backend A (SameSite=Lax, 同一オリジン)
+また、以下の記号を使用する：
 
-攻撃者サイトからの攻撃シナリオ：
-
-| エンドポイント | Alpha (POST json) | Beta (POST text/plain) | Gamma (GET) |
-|----------------|:-----------------:|:----------------------:|:-----------:|
-| `/cors-any` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-| `/cors-specific` | CORS拒否 | **Cookie送信されず** | Cookie送信されず |
-| `/cors-specific-content-type` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-| `/cors-specific-content-type-origin` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-| `/cors-specific-csrf` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-
-**結果**: SameSite=Lax により、クロスサイトPOSTでCookieが送信されないため安全
-
-### Backend B (SameSite=Lax, サブドメイン)
-
-サブドメイン攻撃者サイトからの攻撃シナリオ：
-
-| エンドポイント | Alpha (POST json) | Beta (POST text/plain) | Gamma (GET) |
-|----------------|:-----------------:|:----------------------:|:-----------:|
-| `/cors-any` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-| `/cors-specific` | CORS拒否 | **Cookie送信されず** | Cookie送信されず |
-| `/cors-specific-content-type` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-| `/cors-specific-content-type-origin` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-| `/cors-specific-csrf` | CORS拒否 | Cookie送信されず | Cookie送信されず |
-
-**結果**: サブドメインからでも SameSite=Lax によりクロスサイトPOSTでCookieが送信されない
-
-### Backend C (SameSite=None, 別ドメイン)
-
-別ドメイン攻撃者サイトからの攻撃シナリオ：
-
-| エンドポイント | Alpha (POST json) | Beta (POST text/plain) | Gamma (GET) |
-|----------------|:-----------------:|:----------------------:|:-----------:|
-| `/cors-any` | CORS拒否 | Cookie送信 (レスポンス読めず) | CORS拒否 |
-| `/cors-specific` | CORS拒否 | **脆弱 (攻撃成功)** | CORS拒否 |
-| `/cors-specific-content-type` | CORS拒否 | 415エラー (防御成功) | CORS拒否 |
-| `/cors-specific-content-type-origin` | CORS拒否 | 403エラー (防御成功) | CORS拒否 |
-| `/cors-specific-csrf` | CORS拒否 | 403エラー (防御成功) | CORS拒否 |
-
-**結果**: `/cors-specific` のみ **Beta攻撃（Simple Request）に対して脆弱**
-
-### 攻撃可否サマリー
-
-| 条件 | `/cors-specific` | `/cors-specific-content-type` | `/cors-specific-content-type-origin` | `/cors-specific-csrf` |
-|------|:----------------:|:-----------------------------:|:------------------------------------:|:---------------------:|
-| SameSite=Lax環境 | 安全 | 安全 | 安全 | 安全 |
-| SameSite=None + Alpha攻撃 | 安全 | 安全 | 安全 | 安全 |
-| SameSite=None + Beta攻撃 | **脆弱** | 安全 | 安全 | 安全 |
-| SameSite=None + Gamma攻撃 | 安全 | 安全 | 安全 | 安全 |
+- **A**: 適切な SameSite属性を設定した際の クッキーの送信挙動によるCSRF耐性
+- **B**: 適切な CORSポリシーを設定した際の 同一オリジンポリシー(SOP) によるCSRF耐性
 
 ---
 
-## 脆弱性の詳細解説
+### α. 攻撃者ページからの fetch api を用いた unsafe method による CSRF 攻撃
 
-### なぜ `/cors-specific` は Beta 攻撃に脆弱なのか
+攻撃に成功したとされる条件は以下の通り：
 
-1. **Simple Request の条件**
-   - `text/plain` は Simple Request として扱われる
-   - Simple Request は CORS プリフライトをトリガーしない
-   - ブラウザは直接リクエストを送信する
+- 攻撃者ページからの fetch api を用いた unsafe method によるリクエスト送信が成功すること
+  - 送信自体がブロックされないこと
 
-2. **SameSite=None の挙動**
-   - クロスサイトリクエストでも Cookie を送信
-   - `Secure` 属性が必須（HTTPS のみ）
+それぞれの条件において、CSRF攻撃を防御する防御機構が働くかを以下の表に示す。
 
-3. **CORS の限界**
-   - CORS はレスポンスの読み取りを制御
-   - **リクエスト自体の送信は阻止しない**
-   - Simple Request では検証なしにリクエストが到達
+| 正規SPA ＼ 攻撃者ページ | サブドメイン（本家とは別） | 完全別ドメイン |
+|---|:---:|:---:|
+| 完全同一ドメイン SameSite=Lax | B | A, B |
+| サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | B | A, B |
+| 完全別ドメイン SameSite=None Access-Control-Allow-Credentials有 | B | B |
 
-4. **攻撃の成立**
-   ```
-   攻撃者サイト → POST text/plain + Cookie → バックエンド → 200 OK (状態変更完了)
-                                                       ↓
-                                           レスポンスは読めないが
-                                           リクエストは実行済み
-   ```
+- この表のように
+  - すべての例において 同一オリジンポリシー(SOP) による防御機構 (CORSポリシー) が働くことがわかる
+  - また 本来の通信元である正規のSPAページが完全同一ドメイン・サブドメインであり、かつ 攻撃者ページが完全別ドメインである場合には
+    - クッキーのSameSite属性による防御機構も働くことがわかる
+  - したがって Originヘッダ検証を怠った場合でも
+    - CSRF攻撃は成立しないことがわかる
 
-### 対策
+---
 
-以下のいずれかの防御機構を追加することで防御可能：
+### β. text/plain 等の simple request と認識されるコンテンツタイプを用いた CSRF 攻撃
 
-1. **Content-Type 検証**: `application/json` のみ許可
-2. **Origin 検証**: リクエストの Origin ヘッダーを確認
-3. **hono/csrf**: フレームワーク組み込みの CSRF 保護
-4. **CSRF トークン**: フォームごとにランダムなトークンを検証
+攻撃に成功したとされる条件は以下の通り：
+
+- 攻撃者ページからの fetch api もしくは フォーム送信を用いた POST によるリクエスト送信が成功すること
+  - 送信自体がブロックされないこと
+
+それぞれの条件において、CSRF攻撃を防御する防御機構が働くかを以下の表に示す。
+
+| 正規SPA ＼ 攻撃者ページ | サブドメイン（本家とは別） | 完全別ドメイン |
+|---|:---:|:---:|
+| 完全同一ドメイン SameSite=Lax | なし | A |
+| サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | なし | A |
+| 完全別ドメイン SameSite=None Access-Control-Allow-Credentials有 | なし | なし |
+
+- この表のように
+  - 「なし」と示されている部分では、CSRF攻撃を防御する防御機構が働かないことがわかる
+  - したがって CSRF攻撃に脆弱である
+  - なお、本来の通信元である正規のSPAページが完全同一ドメイン・サブドメインであり、かつ 攻撃者ページが完全別ドメインである場合には
+    - クッキーのSameSite属性による防御機構が働くことがわかる
+    - したがって CSRF攻撃は成立しないことがわかる
+
+#### この攻撃方法の特徴
+
+- JSON データのみを受け付けるべきである API に対して
+- simple request の範疇に収まる条件のリクエストを送信できてしまう点が問題
+
+したがって、以下の条件に該当するものは そもそもAPIで受け入れないことが望ましい：
+
+- POST メソッドである
+- リクエストヘッダが 以下のもの のみで構成されている
+  - Accept
+  - Accept-Language
+  - Content-Language
+  - Content-Type（ただし 以下のいずれかの値に限る）
+    - `application/x-www-form-urlencoded`
+    - `multipart/form-data`
+    - `text/plain`
+
+前述の通り 開発者は、API の要件に不要な場合は、simple request と認識されるリクエストを API で受け入れないようにすることが望ましい。
+
+API フレームワークの実装によっては、JSON を受け取る際に 本当にコンテンツタイプが `application/json` であるかを検証するものもある。しかし、そのような実装になっていない場合も多い。
+
+例: Hono の `c.req.json()` メソッドはコンテンツタイプを検証しない（パフォーマンス低下を避けるためと思われる）
+
+開発者がしっかり自衛を行うことが大事。
+
+ただし、Hono の場合は `hono/csrf` ミドルウェアを提供している：
+- simple request と認識されるリクエストに対して
+- `Origin` ヘッダ検証（+ Sec-Fetch-Site ヘッダ検証）を行うことで 実質的に このタイプのCSRF攻撃を防止できる
+- このような設計により 最小限のパフォーマンス低下で 現実的なCSRF攻撃の脅威を防止している
+
+#### 余談: 他コンテンツタイプの悪用可能性
+
+ここでは、一番想定される例として コンテンツタイプに `text/plain` を提示した。ただし API側が以下のコンテンツタイプを受け付ける場合、これらも悪用される可能性がある：
+- `multipart/form-data`
+- `application/x-www-form-urlencoded`
+
+#### 余談2: 他の送信手段の悪用可能性
+
+以下の手段が考えられる：
+- **フォーム送信**: `<form>` タグを用いてフォームを作成し `submit()` メソッドを呼び出す もしくは ボタンをクリックさせることで リクエスト送信
+- **fetch api**: fetch api を用いて `text/plain` 等の simple request と認識されるコンテンツタイプを用いたリクエスト送信
+
+---
+
+### γ. 攻撃者ページからの fetch api を用いた safe method によるクロスサイト読み取り攻撃
+
+攻撃に成功したとされる条件は以下の通り：
+
+- 攻撃者ページからの fetch api を用いた safe method によるリクエスト送信が成功し
+- レスポンスの内容が攻撃者ページの JavaScript に渡されること
+
+**注意点**: この場合は safe method なので、CORSの防衛ラインの軸足が「APIを呼び出さない」から「API呼び出しは許容するがそのデータは閲覧できない」に変化することに注意
+
+それぞれの条件において、クロスサイト読み取り攻撃を防御する防御機構が働くかを以下の表に示す。
+
+| 正規SPA ＼ 攻撃者ページ | サブドメイン（本家とは別） | 完全別ドメイン |
+|---|:---:|:---:|
+| 完全同一ドメイン SameSite=Lax | B | A, B |
+| サブドメイン SameSite=Lax Access-Control-Allow-Credentials有 | B | A, B |
+| 完全別ドメイン SameSite=None Access-Control-Allow-Credentials有 | B | B |
+
+- この表のように
+  - すべての例において 同一オリジンポリシー(SOP) による防御機構 (CORSポリシー) が働くことがわかる
+  - また 本来の通信元である正規のSPAページが完全同一ドメイン・サブドメインであり、かつ 攻撃者ページが完全別ドメインである場合には
+    - クッキーのSameSite属性による防御機構も働くことがわかる
+  - したがって Originヘッダ検証を怠った場合でも
+    - クロスサイト読み取り攻撃は成立しないことがわかる
+
+#### 余談1: safe method での副作用
+
+副作用の発生するAPI は safe method で実装しないことが重要。
+
+safe method において、同一オリジンポリシー (SOP) の防御機構はレスポンスの取得に関しては制限するが、リクエストの送信自体は制限しない。そのため、safe method で副作用を発生させるAPIが存在している場合、CSRF攻撃が成立してしまう可能性がある。
+
+#### 余談2: ワイルドカード CORS の危険性
+
+`Access-Control-Allow-Origin` に ワイルドカード `*` を設定し、かつ `Access-Control-Allow-Credentials` ヘッダが `true` に設定されている場合は、ブラウザは レスポンス内容を JavaScript に渡さずエラーにするのは前述の通り。
+
+ただし、`Access-Control-Allow-Origin` に ワイルドカード `*` を設定してしまっており、かつクッキー情報無しでアクセスできるAPIが存在した場合は、クロスサイト読み取り攻撃が成立してしまう可能性がある。
+
+ただしそもそも、そのようなAPI設計は今回の前提条件に反するため ここでは考慮しない。
+
+#### 余談3: Origin ヘッダの付与条件
+
+Origin ヘッダは、同一オリジン = 完全同一ドメインで GET, HEAD のみ付属しないという特徴がある。
+
+これは、完全同一ドメインかつ safe method の場合 CSRF攻撃の危険性が極めて少なく、心配する必要がないと判断されるからである。したがって、同一オリジンかつ safe method の場合には Origin ヘッダ検証を省略することができる。
+
+---
+
+## 結論
+
+### α: fetch api を用いた unsafe method による CSRF 攻撃
+- Origin ヘッダ検証を怠った場合でも CSRF 攻撃が成立しないことが多い
+
+### β: simple request を用いた CSRF 攻撃
+- Origin ヘッダ検証を怠った場合に CSRF 攻撃が成立する可能性がある
+- したがって 開発者は
+  - API の要件に不要な場合は
+  - simple request と認識されるリクエストを API で受け入れないようにすることが望ましい
+- もしくは Hono の `hono/csrf` ミドルウェアを利用して simple request と認識されるリクエストに対して Origin ヘッダ検証を行うことが望ましい
+
+### γ: safe method によるクロスサイト読み取り攻撃
+- Origin ヘッダ検証を怠った場合でも クロスサイト読み取り攻撃が成立しないことが多い
+
+### 総括
+
+以上より、Origin ヘッダ検証を怠った場合においても、基本的には 適切な CORSポリシーを設定した際の 同一オリジンポリシー(SOP) によるCSRF耐性が働くことで、CSRF攻撃・クロスサイト読み取り攻撃を防御できる場合が多いことがわかる。
+
+SameSite属性によるCSRF耐性も副次的に働く場合があるが、同一オリジンポリシーよりは防御効果が低い。
+
+どちらの場合も、β の攻撃方法に対しては防御効果がない場合がある。その部分のみ `hono/csrf` ミドルウェアで狙い撃ちの防御を行うことが望ましい。
+
+### 推奨される対策
+
+基本的には以下に気をつけて実装すれば CSRF は基本的に防御できる：
+
+1. `hono/cors` で正しく CORSポリシーを設定する
+2. クッキーの SameSite属性を適切に設定する
+3. データを変更するAPI（副作用あり）とデータを取得するAPI（副作用なし）でメソッドを分離する
+
+更に安全を期すのであれば、`hono/csrf` ミドルウェアの代わりに以下の対策を追加することが望ましい：
+
+- すべてのリクエストに対して Origin ヘッダ検証を行う
+  - ただし 同一ドメイン = 同一オリジンかつ GET/HEAD の場合は Origin ヘッダが付属しないため 例外的に検証をスキップする
+- コンテンツタイプを `application/json` のみ受け入れる
+
+ただし この場合は独自実装になるため 注意が必要。
 
 ---
 

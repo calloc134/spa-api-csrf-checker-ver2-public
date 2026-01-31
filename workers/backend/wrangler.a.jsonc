@@ -1,0 +1,26 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "csrf-backend-a",
+  "compatibility_date": "2024-12-01",
+  "main": "src/index.ts",
+  "assets": {
+    "directory": "../../apps/legit-frontend/dist-alpha",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "html_handling": "none"
+  },
+  "vars": {
+    "EXPECTED_ORIGIN": "https://csrf-backend-a.calloc134personal.workers.dev",
+    "COOKIE_SAMESITE": "Lax",
+    "COOKIE_NAME": "csrf_demo",
+    "COOKIE_VALUE": "backend-a",
+    "BACKEND_ID": "A"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "csrf-demo-logs",
+      "database_id": "bdf9bd82-b20f-4863-997d-08a61c11003b"
+    }
+  ]
+}

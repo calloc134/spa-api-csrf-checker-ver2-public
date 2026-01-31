@@ -1,0 +1,13 @@
+{
+  "name": "static-sites",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "deploy:legit:beta": "wrangler deploy -c wrangler.legit.beta.jsonc",
+    "deploy:attacker:beta": "wrangler deploy -c wrangler.attacker.beta.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "^3.99.0"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "csrf-frontend-subdomain",
+  "compatibility_date": "2024-12-01",
+  "assets": {
+    "directory": "../../apps/legit-frontend/dist-beta",
+    "not_found_handling": "single-page-application"
+  }
+}
